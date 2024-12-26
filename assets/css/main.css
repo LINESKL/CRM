@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    font-size: 18px;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+:root {
+    --bg-nav-color: rgb(33, 62, 96);
+    --hover-nav-color: rgb(230, 140, 58);
+    --bg-color: #F4F2EF;
+    --bg-cancel-color: rgb(98, 98, 98);
+    --text-color: rgb(0, 0, 0);
+    --nav-text-color: rgb(255, 255, 255);
+    
+}
