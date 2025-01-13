@@ -1,6 +1,7 @@
 <template>
   <div class="dashboard-container">
     <div class="content">
+
       <!-- Карта -->
       <div class="card">
         <div class="card-body map-container">
@@ -34,25 +35,51 @@
         </div>
       </div>
 
+      <!-- Кнопка для перехода на страницу пользователей -->
+      <div v-if="selectedRegionName" class="button-container">
+        <button @click="goToUsersPage">Посмотреть пользователей региона {{ selectedRegionName }}</button>
+      </div>
 
       <!-- Данные -->
       <div class="data-cards">
         <div class="data-card" v-if="analyticsData">
           <h3>Данные для региона: {{ selectedRegionName }}</h3>
 
-          <!-- Круговая диаграмма -->
+          <!-- Общая информация -->
+          <p>Общее количество пользователей: {{ analyticsData.total_users }}</p>
+          <p v-if="analyticsData.age_distribution">Средний возраст пользователей: {{ analyticsData.age_distribution.average_age.toFixed(1) }}</p>
+          <p v-else>Средний возраст пользователей: Данные отсутствуют</p>
+
+          <!-- Распределение по полу -->
           <div class="chart">
             <canvas id="genderChart"></canvas>
           </div>
 
-          <!-- Гистограмма возрастов -->
+          <!-- Возрастное распределение -->
           <div class="chart">
             <canvas id="ageChart"></canvas>
           </div>
 
+          <!-- Гистограмма количества детей -->
           <div class="chart">
             <canvas id="childrenChart"></canvas>
           </div>
+
+          <!-- Пособия -->
+          <h4>Статистика по пособиям</h4>
+          <p v-if="analyticsData.benefits_stats">Получают пособия: {{ analyticsData.benefits_stats.receiving_benefits }}</p>
+          <p v-if="analyticsData.benefits_stats">Средний возраст получателей пособий: {{ analyticsData.benefits_stats.average_age_benefit_recipients.toFixed(1) }}</p>
+          <p v-if="analyticsData.benefits_stats">Процент с детьми: {{ analyticsData.benefits_stats.percentage_with_children }}%</p>
+          <p v-else>Статистика по пособиям: Данные отсутствуют</p>
+
+          <!-- Семейное положение -->
+          <h4>Семейное положение</h4>
+          <div class="chart">
+            <canvas id="maritalStatusChart"></canvas>
+          </div>
+
+          <!-- Кнопка для экспорта данных в Excel -->
+          <button @click="exportToExcel">Экспорт в Excel</button>
         </div>
       </div>
     </div>
@@ -60,15 +87,22 @@
 </template>
 
 <script>
+import { defineComponent } from 'vue';
 import {
   Chart,
   PieController,
   ArcElement,
   Tooltip,
   Legend,
+  BarController,
+  BarElement,
 } from 'chart.js';
-Chart.register(PieController, ArcElement, Tooltip, Legend);
-export default {
+import * as XLSX from 'xlsx';
+
+// Зарегистрируем компоненты Chart.js, которые мы будем использовать
+Chart.register(PieController, ArcElement, Tooltip, Legend, BarController, BarElement);
+
+export default defineComponent({
   data() {
     return {
       regions: [
@@ -143,24 +177,32 @@ export default {
       ],
       selectedRegion: null,
       selectedRegionName: null,
-      originalViewBox: "0 0 3157 2175",
       viewBox: "0 0 3157 2175",
       analyticsData: null,
       genderChartInstance: null,
       ageChartInstance: null,
       childrenChartInstance: null,
+      maritalStatusChartInstance: null,
     };
   },
   methods: {
-    resetViewBox() {
-      this.viewBox = this.originalViewBox;
-      this.selectedRegion = null;
-      this.analyticsData = null;
-
-      // Удаляем существующие графики при сбросе
-      if (this.genderChartInstance) this.genderChartInstance.destroy();
-      if (this.ageChartInstance) this.ageChartInstance.destroy();
-      if (this.childrenChartInstance) this.childrenChartInstance.destroy();
+    resetCharts() {
+      if (this.genderChartInstance) {
+        this.genderChartInstance.destroy();
+        this.genderChartInstance = null;
+      }
+      if (this.ageChartInstance) {
+        this.ageChartInstance.destroy();
+        this.ageChartInstance = null;
+      }
+      if (this.childrenChartInstance) {
+        this.childrenChartInstance.destroy();
+        this.childrenChartInstance = null;
+      }
+      if (this.maritalStatusChartInstance) {
+        this.maritalStatusChartInstance.destroy();
+        this.maritalStatusChartInstance = null;
+      }
     },
     async handleRegionClick(region) {
       const encodedRegionName = encodeURIComponent(region.region);
@@ -173,34 +215,28 @@ export default {
       this.selectedRegionName = region.region;
 
       try {
-        const [genderResponse, ageResponse, childrenResponse] = await Promise.all([
-          fetch(`http://127.0.0.1:8000/api/analytics/region/${encodedRegionName}/gender/`).then((res) => res.json()),
-          fetch(`http://127.0.0.1:8000/api/analytics/region/${encodedRegionName}/age/`).then((res) => res.json()),
-          fetch(`http://127.0.0.1:8000/api/analytics/region/${encodedRegionName}/children/`).then((res) => res.json()),
+        const response = await fetch(`http://127.0.0.1:8000/api/stats/region/${encodedRegionName}/`);
+        const data = await response.json();
 
-        ]);
+        this.analyticsData = data;
 
-        this.analyticsData = {
-          gender: genderResponse,
-          age: ageResponse,
-          children: childrenResponse.children_stats.distribution,
-
-        };
-
-        // Обновляем графики
         this.$nextTick(() => {
-          this.renderGenderChart(genderResponse.gender_distribution);
-          this.renderAgeChart(ageResponse.age_distribution);
-          this.renderChildrenChart(childrenResponse.children_stats.distribution);
+          this.resetCharts();
+          this.renderGenderChart(data.gender_distribution);
+          this.renderAgeChart(data.age_distribution);
+          this.renderChildrenChart(data.children_stats.distribution);
+          this.renderMaritalStatusChart(data.marital_status);
         });
       } catch (error) {
         console.error("Ошибка загрузки данных:", error);
       }
     },
-
+    goToUsersPage() {
+      if (this.selectedRegionName) {
+        this.$router.push({path: '/users', query: {region: this.selectedRegionName}});
+      }
+    },
     renderGenderChart(data) {
-      if (this.genderChartInstance) this.genderChartInstance.destroy();
-
       const ctx = document.getElementById("genderChart").getContext("2d");
       this.genderChartInstance = new Chart(ctx, {
         type: "pie",
@@ -220,13 +256,11 @@ export default {
       });
     },
     renderAgeChart(data) {
-      if (this.ageChartInstance) this.ageChartInstance.destroy();
-
       const ctx = document.getElementById("ageChart").getContext("2d");
       this.ageChartInstance = new Chart(ctx, {
         type: "bar",
         data: {
-          labels: ["Меньше 18 лет", "18-25 лет", "26-40 лет", "41-60 лет", "Больше 100 лет"],
+          labels: ["Меньше 18 лет", "18-25 лет", "26-40 лет", "41-60 лет", "61-100 лет", "Больше 100 лет"],
           datasets: [
             {
               label: "Возрастное распределение",
@@ -259,20 +293,13 @@ export default {
       });
     },
     renderChildrenChart(data) {
-      // Уничтожаем старый график, если он есть
-      if (this.childrenChartInstance) {
-        this.childrenChartInstance.destroy();
-      }
-
       const ctx = document.getElementById("childrenChart").getContext("2d");
 
-      // Убедитесь, что данные корректны
       if (!data || typeof data !== "object") {
         console.error("Invalid children data:", data);
         return;
       }
 
-      // Создаем гистограмму
       this.childrenChartInstance = new Chart(ctx, {
         type: "bar",
         data: {
@@ -308,43 +335,173 @@ export default {
         },
       });
     },
+    renderMaritalStatusChart(data) {
+      const ctx = document.getElementById("maritalStatusChart").getContext("2d");
+
+      this.maritalStatusChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: Object.keys(data.distribution),
+          datasets: [
+            {
+              label: "Распределение по семейному положению",
+              data: Object.values(data.distribution),
+              backgroundColor: "rgba(255,159,64,0.6)",
+              borderColor: "rgb(255,159,64)",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "",
+              },
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "",
+              },
+            },
+          },
+        },
+      });
+    },
+    exportToExcel() {
+      if (!this.analyticsData) {
+        return;
+      }
+
+      const workbook = XLSX.utils.book_new();
+
+      // Общая информация
+      const generalData = [
+        ["Показатель", "Значение"],
+        ["Общее количество пользователей", this.analyticsData.total_users],
+        ["Средний возраст пользователей", this.analyticsData.age_distribution ? this.analyticsData.age_distribution.average_age.toFixed(1) : "Данные отсутствуют"],
+      ];
+
+      const generalSheet = XLSX.utils.aoa_to_sheet(generalData);
+      XLSX.utils.book_append_sheet(workbook, generalSheet, "Общая информация");
+
+      // Распределение по полу
+      const genderData = [
+        ["Пол", "Процент"],
+        ["Мужчины", this.analyticsData.gender_distribution ? this.analyticsData.gender_distribution.male_percentage : "Данные отсутствуют"],
+        ["Женщины", this.analyticsData.gender_distribution ? this.analyticsData.gender_distribution.female_percentage : "Данные отсутствуют"],
+      ];
+
+      const genderSheet = XLSX.utils.aoa_to_sheet(genderData);
+      XLSX.utils.book_append_sheet(workbook, genderSheet, "Распределение по полу");
+
+      // Возрастное распределение
+      const ageData = [
+        ["Возрастная группа", "Количество"],
+        ...Object.entries(this.analyticsData.age_distribution ? this.analyticsData.age_distribution.age_groups : {}).map(([key, value]) => [key, value])
+      ];
+
+      const ageSheet = XLSX.utils.aoa_to_sheet(ageData);
+      XLSX.utils.book_append_sheet(workbook, ageSheet, "Возрастное распределение");
+
+      // Гистограмма количества детей
+      const childrenData = [
+        ["Количество детей", "Количество людей"],
+        ...Object.entries(this.analyticsData.children_stats ? this.analyticsData.children_stats.distribution : {}).map(([key, value]) => [key.replace("_children", " детей"), value])
+      ];
+
+      const childrenSheet = XLSX.utils.aoa_to_sheet(childrenData);
+      XLSX.utils.book_append_sheet(workbook, childrenSheet, "Гистограмма количества детей");
+
+      // Статистика по пособиям
+      const benefitsData = [
+        ["Показатель", "Значение"],
+        ["Получают пособия", this.analyticsData.benefits_stats ? this.analyticsData.benefits_stats.receiving_benefits : "Данные отсутствуют"],
+        ["Средний возраст получателей пособий", this.analyticsData.benefits_stats ? this.analyticsData.benefits_stats.average_age_benefit_recipients.toFixed(1) : "Данные отсутствуют"],
+        ["Процент с детьми", this.analyticsData.benefits_stats ? this.analyticsData.benefits_stats.percentage_with_children : "Данные отсутствуют"],
+      ];
+
+      const benefitsSheet = XLSX.utils.aoa_to_sheet(benefitsData);
+      XLSX.utils.book_append_sheet(workbook, benefitsSheet, "Статистика по пособиям");
+
+      // Семейное положение
+      const maritalStatusData = [
+        ["Семейное положение", "Количество"],
+        ...Object.entries(this.analyticsData.marital_status ? this.analyticsData.marital_status.distribution : {}).map(([key, value]) => [key, value])
+      ];
+
+      const maritalStatusSheet = XLSX.utils.aoa_to_sheet(maritalStatusData);
+      XLSX.utils.book_append_sheet(workbook, maritalStatusSheet, "Семейное положение");
+
+      XLSX.writeFile(workbook, `Данные_региона_${this.selectedRegionName}.xlsx`);
+    }
   },
-};
+});
 </script>
 
-
-<style>
-
-.chart {
-  border: 2px solid #213e60;
-  border-radius: 10px;
-  margin-bottom: 10px;
-  padding: 10px;
+<style scoped>
+.filters {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
 }
 
+.filters label {
+  display: flex;
+  flex-direction: column;
+}
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: #f5f5f5;
+}
 
+.content {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.card-body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background-color: #f9f9f9;
+}
 
 .map-container {
   display: flex;
-  flex: 1;
-  height: 100%;
   justify-content: center;
   align-items: center;
-  padding: 10px;
-  background-color: #ffffff;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  height: 600px; /* Adjust the height as needed */
 }
-
 
 .map-svg {
   width: 100%;
-  height: auto;
+  height: 100%;
   max-height: 600px;
-  display: block;
-  margin: auto;
 }
-
-
 
 path {
   fill: #213e60;
@@ -368,12 +525,32 @@ path.active {
   pointer-events: none;
 }
 
+.button-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+button {
+  background-color: #213e60;
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  margin-bottom: 17px;
+}
+
+button:hover {
+  background-color: #4071b4;
+}
 
 .data-cards {
   display: flex;
   flex-direction: column;
   gap: 20px;
-
 }
 
 h3 {
@@ -389,25 +566,4 @@ h3 {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   height: 100%;
 }
-
-.card {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.card-body {
-  display: flex;
-  flex: 1;
-  padding: 0;
-  justify-content: center;
-  align-items: center;
-}
-
-
 </style>
