@@ -9,6 +9,8 @@
               xmlns="http://www.w3.org/2000/svg"
               :viewBox="viewBox"
               class="map-svg"
+              @mousemove="handleMouseMove"
+              @mouseleave="handleMouseLeave"
           >
             <g id="kz">
               <path
@@ -16,22 +18,14 @@
                   :key="region.id"
                   :d="region.path"
                   :data-name="region.region"
+                  :fill="region.fill"
                   :class="{ active: selectedRegion === region.id }"
                   @click="handleRegionClick(region)"
+                  @mouseover="showTooltip(region.region)"
               />
-              <text
-                  v-for="region in regions"
-                  :key="'text-' + region.id"
-                  :x="region.labelPosition.x"
-                  :y="region.labelPosition.y"
-                  text-anchor="middle"
-                  class="region-label"
-                  :style="{ fontSize: region.region.length > 10 ? '40px' : '55px' }"
-              >
-                {{ region.region }}
-              </text>
             </g>
           </svg>
+          <div v-if="tooltipVisible" :style="tooltipStyle" class="tooltip">{{ tooltipText }}</div>
         </div>
       </div>
 
@@ -99,7 +93,6 @@ import {
 } from 'chart.js';
 import * as XLSX from 'xlsx';
 
-// Зарегистрируем компоненты Chart.js, которые мы будем использовать
 Chart.register(PieController, ArcElement, Tooltip, Legend, BarController, BarElement);
 
 export default defineComponent({
@@ -107,73 +100,91 @@ export default defineComponent({
     return {
       regions: [
         { id: 1,
-          region: "Астана",
+          region: "Акмолинская",
           path: "M2140.64 429.237L2117.5 620.525L1746.47 787.641L1665.49 729.001L1603.42 756.978L1463.78 617.466L1507.93 448.485L1659.76 469.972L1757.55 258.988L1944.66 305.84L2140.64 429.237Z",
-          labelPosition: { x: 1800, y: 570 } },
+          fill: "#213e60", },
         { id: 2,
-          region: "Актобе",
+          region: "Актюбинская",
           path: "M775.05 1533.77L758.435 1399.63L640.468 1235.05L629.51 998.848L536.467 931.33L603.045 730.792L756.734 652.381L921.498 650.815L1023.17 724.226L1169.14 622.539L1267.48 812.932L1234.1 959.755L1350.08 1083L1264.48 1228.04L1142.08 1135.6L958.605 1409.85L959.752 1503.11L775.05 1533.77Z",
-          labelPosition: { x: 900, y: 1000 } },
+          fill: "#213e60", },
         { id: 3,
-          region: "Алматы",
+          region: "Алматинская",
           path: "M2288.47 1865.54L2247.57 1685.89L2156.07 1576.96L2144.44 1408.13L2204.25 1329.2L2320.6 1313.91L2317.31 1465.65L2409.68 1682.46L2478.04 1722.15L2661.95 1733.34L2682.49 1829.73L2615.39 1941.04L2499.88 1870.69L2288.47 1865.54Z",
-          labelPosition: { x: 2400, y: 1800 } },
+          fill: "#213e60", },
         { id: 5,
-          region: "Атырау",
+          region: "Атырауская",
           path: "M536.467 931.331L629.51 998.849L640.468 1235.05L758.435 1399.63L662.424 1358.74L471.866 1444.76L481.479 1307.04L340.766 1257.65L178.098 1353L135.097 1197.07L21.6804 1145.37L2.9292 1062.79L203.06 1125.45L331.628 1013.69L447.023 1044.13L536.467 931.331Z",
-          labelPosition: { x: 400, y: 1200 } },
+          fill: "#213e60", },
         { id: 6,
-          region: "Семей",
+          region: "Абайская",
           path: "M2799.66 1476.55L2768.84 1394.26L2557.36 1245.87L2419.02 1234.38L2371.39 927.749L2439.08 777.793L2563.02 557.036L2616.74 678.269L2745.62 698.786L2724.02 816.96L2905.44 1051.59L2871.97 1227.36L2799.66 1476.55Z",
-          labelPosition: { x: 2600, y: 1000 } },
+          fill: "#213e60", },
         { id: 7,
-          region: "Тараз",
+          region: "Жамбылская",
           path: "M2144.44 1408.13L2156.07 1576.96L2247.57 1685.89L2288.47 1865.54L2168.85 1823.61L2100.37 1930.22L1975.36 1880.83L1896.87 1957.75L1833.78 1831.74L1751.69 1408.13L1933.03 1408.06L2144.44 1408.13Z",
-          labelPosition: { x: 1980, y: 1610 } },
+          fill: "#213e60", },
         { id: 8,
-          region: "Жезказган",
+          region: "Улытауская",
           path: "M1264.48 1228.04L1350.09 1083L1408.75 969.305L1516.31 955.652L1623.16 825.391L1668.1 934.166L1782.35 1013.62L1957.72 925.362L1993.24 1139.48L1937.19 1160.89L1933.03 1408.06L1751.69 1408.13L1604.18 1408.43L1468.01 1357.18L1264.48 1228.04Z",
-          labelPosition: { x: 1650, y: 1200 } },
+          fill: "#213e60", },
         { id: 9,
-          region: "Костанай",
+          region: "Костанайская",
           path: "M1507.93 448.485L1463.78 617.466L1603.42 756.978L1665.49 729.001L1623.16 825.391L1516.31 955.652L1408.75 969.305L1350.09 1083L1234.1 959.755L1267.49 812.932L1169.14 622.539L1109.05 271.522L1517.38 120.148L1507.93 448.485Z",
-          labelPosition: { x: 1300, y: 500 } },
+          fill: "#213e60", },
         { id: 10,
-          region: "Кызылорда",
+          region: "Кызылординская",
           path: "M959.753 1503.1L958.605 1409.85L1142.08 1135.6L1264.48 1228.04L1468.01 1357.18L1604.18 1408.43L1658.97 1829.2L1519.83 1945.07L1433.04 1741.47L1197.11 1783.25L1126.1 1667.83L959.753 1503.1Z",
-          labelPosition: { x: 1300, y: 1500 } },
+          fill: "#213e60", },
         { id: 11,
-          region: "Актау",
+          region: "Мангистауская",
           path: "M758.435 1399.63L775.05 1533.77L720.022 1557.34L720.102 2105.92L576.738 1954.17L479.462 1989.68L395.121 1879.56L269.678 1610.46L356.669 1504L471.866 1444.76L662.424 1358.74L758.435 1399.63Z" ,
-          labelPosition: { x: 500, y: 1700 } },
+          fill: "#213e60", },
         { id: 12,
-          region: "Петропавловск",
+          region: "Северо-Казахстанская",
           path: "M2140.64 429.237L1944.66 305.84L1757.55 258.988L1659.76 469.972L1507.93 448.485L1517.38 120.148L1685.59 71.3557L1745.36 0.629883L1887.74 20.8479L1919.78 199.08L2099.89 297.783L2140.64 429.237Z",
-          labelPosition: { x: 1700, y: 200 } },
+          fill: "#213e60", },
         { id: 14,
-          region: "Павлодар",
+          region: "Павлодарская",
           path: "M2117.5 620.525L2140.64 429.237L2099.89 297.782L2274.23 199.527L2450.43 322.85L2563.02 557.036L2439.08 777.793L2248.56 783.985L2145.66 722.212L2117.5 620.525Z",
-          labelPosition: { x: 2300, y: 500 } },
+          fill: "#213e60", },
         { id: 16,
-          region: "Туркестан",
+          region: "Туркестанская",
           path: "M1751.69 1408.13L1833.78 1831.74L1896.88 1957.75L1714.59 2175L1559.35 2116.81L1519.83 1945.07L1658.96 1829.2L1604.18 1408.43L1751.69 1408.13Z",
-          labelPosition: { x: 1700, y: 2000 } },
+          fill: "#213e60", },
         { id: 17,
-          region: "Уральск",
+          region: "Западно-Казахстанская",
           path: "M603.045 730.792L536.467 931.33L447.023 1044.13L331.628 1013.69L203.06 1125.45L2.92931 1062.78L0.160156 831.583L137.352 730.269L285.937 572.255L512.652 585.311L603.045 730.792Z",
-          labelPosition: { x: 300, y: 850 } },
+          fill: "#213e60", },
         { id: 18,
-          region: "Караганда",
+          region: "Карагандинская",
           path: "M1665.49 729.001L1746.47 787.641L2117.5 620.525L2145.66 722.212L2248.56 783.985L2439.08 777.793L2371.39 927.75L2419.02 1234.38L2320.6 1313.91L2204.25 1329.2L2144.44 1408.13L1933.03 1408.06L1937.19 1160.89L1993.24 1139.48L1957.72 925.362L1782.35 1013.62L1668.1 934.166L1623.16 825.391L1665.49 729.001Z",
-          labelPosition: { x: 2150, y: 1000 } },
+          fill: "#213e60", },
         { id: 19,
-          region: "Талдыкорган",
+          region: "Жетысуская",
           path: "M2661.95 1733.34L2478.04 1722.15L2409.68 1682.46L2317.31 1465.65L2320.6 1313.91L2419.02 1234.38L2557.36 1245.87L2768.84 1394.26L2799.66 1476.55L2651.07 1549.51L2661.95 1733.34Z",
-          labelPosition: { x: 2500, y: 1500 } },
+          fill: "#213e60", },
         { id: 20,
-          region: "Усть-Каменогорск",
+          region: "Восточно-Казахстанская",
           path: "M2871.97 1227.36L2905.44 1051.59L2724.02 816.961L2745.62 698.786L2922.49 680.657L3031.68 866.946L3157 878.734L3140.27 1028.91L3073.06 1054.35L3069.53 1226.39L3001.18 1283.99L2871.97 1227.36Z",
-          labelPosition: { x: 2950, y: 900 } }
+          fill: "#213e60", },
+        {
+          id: 21,
+          region: "Алматы",
+          path: "M2338.81 1707.22L2346.94 1698.8C2362.29 1682.9 2387.63 1682.46 2403.52 1697.81L2412.23 1706.24C2428.51 1721.96 2428.51 1748.04 2412.23 1763.76L2403.52 1772.19C2387.63 1787.54 2362.29 1787.1 2346.94 1771.2L2338.81 1762.78C2323.85 1747.28 2323.85 1722.72 2338.81 1707.22Z",
+          fill: "#FBFF00",
+        },
+        {
+          id: 22,
+          region: "Шымкент",
+          path: "M1643.81 1979.22L1651.94 1970.8C1667.29 1954.9 1692.63 1954.46 1708.52 1969.81L1717.23 1978.24C1733.51 1993.96 1733.51 2020.04 1717.23 2035.76L1708.52 2044.19C1692.63 2059.54 1667.29 2059.1 1651.94 2043.2L1643.81 2034.78C1628.85 2019.28 1628.85 1994.72 1643.81 1979.22Z",
+          fill: "#FBFF00",
+        },
+        {
+          id: 23,
+          region: "Астана",
+          path: "M1822.81 611.221L1830.94 602.798C1846.29 586.896 1871.63 586.455 1887.52 601.813L1896.23 610.236C1912.51 625.96 1912.51 652.04 1896.23 667.764L1887.52 676.187C1871.63 691.545 1846.29 691.104 1830.94 675.202L1822.81 666.779C1807.85 651.28 1807.85 626.72 1822.81 611.221Z",
+          fill: "#FBFF00",
+        }
       ],
       selectedRegion: null,
       selectedRegionName: null,
@@ -183,6 +194,12 @@ export default defineComponent({
       ageChartInstance: null,
       childrenChartInstance: null,
       maritalStatusChartInstance: null,
+      tooltipVisible: false,
+      tooltipText: '',
+      tooltipStyle: {
+        top: '0px',
+        left: '0px'
+      },
     };
   },
   methods: {
@@ -230,6 +247,19 @@ export default defineComponent({
       } catch (error) {
         console.error("Ошибка загрузки данных:", error);
       }
+    },
+    showTooltip(text) {
+      this.tooltipText = text;
+      this.tooltipVisible = true;
+    },
+    handleMouseMove(event) {
+      if (this.tooltipVisible) {
+        this.tooltipStyle.top = `${event.clientY - 10}px`;
+        this.tooltipStyle.left = `${event.clientX + 10}px`;
+      }
+    },
+    handleMouseLeave() {
+      this.tooltipVisible = false;
     },
     goToUsersPage() {
       if (this.selectedRegionName) {
@@ -445,12 +475,6 @@ export default defineComponent({
 </script>
 
 <style scoped>
-.filters {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20px;
-}
-
 .filters label {
   display: flex;
   flex-direction: column;
@@ -494,7 +518,7 @@ export default defineComponent({
   justify-content: center;
   align-items: center;
   width: 100%;
-  height: 600px; /* Adjust the height as needed */
+  height: 600px;
 }
 
 .map-svg {
@@ -504,7 +528,6 @@ export default defineComponent({
 }
 
 path {
-  fill: #213e60;
   stroke: #ffffff;
   stroke-width: 5px;
   cursor: pointer;
@@ -517,12 +540,6 @@ path:hover {
 
 path.active {
   fill: #e14d4d;
-}
-
-.region-label {
-  font-size: 12px;
-  fill: #ffffff;
-  pointer-events: none;
 }
 
 .button-container {
@@ -565,5 +582,17 @@ h3 {
   padding: 20px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   height: 100%;
+}
+
+.tooltip {
+  position: absolute;
+  background-color: #333;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 5px;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+  z-index: 10;
 }
 </style>
