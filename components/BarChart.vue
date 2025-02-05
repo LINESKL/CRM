@@ -1,51 +1,51 @@
 <template>
   <div>
-    <canvas ref="chartCanvas"></canvas>
+    <canvas ref="barChart"></canvas>
   </div>
 </template>
 
 <script>
-import {
-  Chart,
-  BarController,
-  BarElement,
-  CategoryScale,
-  LinearScale,
-  Title,
-  Tooltip,
-} from 'chart.js';
-
-// Регистрируем компоненты для графика
-Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, Tooltip);
+import { Chart, registerables } from 'chart.js';
+Chart.register(...registerables);
 
 export default {
-  props: {
-    data: {
-      type: Object,
-      required: true,
+  props: ['data'],
+  mounted() {
+    this.renderChart();
+  },
+  watch: {
+    data() {
+      this.renderChart();
     },
   },
-  mounted() {
-    if (this.data.labels && this.data.datasets) {
-      this.createChart();
-    } else {
-      console.error('Неверный формат данных для BarChart:', this.data);
-    }
-  },
   methods: {
-    createChart() {
-      const ctx = this.$refs.chartCanvas.getContext('2d');
-      new Chart(ctx, {
+    renderChart() {
+      if (!Array.isArray(this.data)) {
+        console.error('Данные, переданные в BarChart, не являются массивом:', this.data);
+        return;
+      }
+
+      const ctx = this.$refs.barChart.getContext('2d');
+      if (this.chart) {
+        this.chart.destroy();
+      }
+      this.chart = new Chart(ctx, {
         type: 'bar',
-        data: this.data,
+        data: {
+          labels: this.data.map(item => item.label),
+          datasets: [
+            {
+              label: 'Топ использованных функций',
+              data: this.data.map(item => item.value),
+              backgroundColor: 'rgba(255, 99, 132, 0.2)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 1,
+            },
+          ],
+        },
         options: {
           responsive: true,
-          plugins: {
-            title: {
-              display: true,
-
-            },
-          },
+          maintainAspectRatio: false,
         },
       });
     },
@@ -55,6 +55,7 @@ export default {
 
 <style scoped>
 canvas {
-  max-width: 100%;
+  width: 100%;
+  height: 400px;
 }
 </style>
